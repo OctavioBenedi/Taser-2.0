@@ -5,16 +5,20 @@ SRCS := taser
 all: x86
 
 x86:
-@echo "x86 building"
-@echo linking $@
-@echo "astyle --style=allman $(SRCS).c"
-@astyle --style=allman $(SRCS).c
-@echo "gcc $(SRCS).c -Wl,-warn-common -Os $(LDFLAGS) -o $(SRCS)"
-@gcc $(SRCS).c -Wl,-warn-common -Os -o $(SRCS) -lpthread
-@echo "strip --strip-unneeded $(SRCS) $(SRCS)"
-@strip --strip-unneeded $(SRCS)
+	@echo "x86 building"
+	@echo linking $@
+	@echo "astyle --style=allman $(SRCS).c"
+	@astyle --style=allman $(SRCS).c
+	@echo "gcc $(SRCS).c -Wl,-warn-common -Os $(LDFLAGS) -o $(SRCS)"
+	@gcc $(SRCS).c -Wl,-warn-common -Os -o $(SRCS) -lpthread
+	@echo "strip --strip-unneeded $(SRCS) $(SRCS)"
+	@strip --strip-unneeded $(SRCS)
 
 clean:
-@echo "Cleaning"
-@rm $(SRCS).c.orig $(SRCS)
+	@echo "Cleaning"
+	@rm $(SRCS).c.orig $(SRCS)
+
+install:
+	@echo "Install"
+	@sudo cp taser /usr/bin
 
