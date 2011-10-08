@@ -1,0 +1,5 @@
+Taser is a simple way to communicate to through serial ports.
+
+Taser is oriented to be easy of use, portable and lightweight.
+
+To compile just run make and done.
