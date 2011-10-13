@@ -16,7 +16,7 @@ x86:
 
 clean:
 	@echo "Cleaning"
-	@rm $(SRCS).c.orig $(SRCS)
+	@rm -f $(SRCS).c.orig $(SRCS)
 
 install:
 	@echo "Install"

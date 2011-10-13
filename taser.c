@@ -75,7 +75,9 @@ int max(int a, int b)
     return (a > b ? a : b);
 }
 
-
+//---CtrlCSignalRelease(void * temp_pt)------//
+//--Release Ctrl+c timer---------------------//
+//-------------------------------------------//
 static void * CtrlCSignalRelease( void * temp_pt )
 {
     sleep(2);
@@ -83,22 +85,33 @@ static void * CtrlCSignalRelease( void * temp_pt )
     if (DEBUG)fprintf(stderr,"\nCTRL+C trap released\n");
 }
 
-
+//--sigint_handler(int s)--------------------//
+//--Trap SIGINT signal-----------------------//
+//-------------------------------------------//
 void sigint_handler(int s)
 {
     if (exit_signal)
     {
+        // If twice Ctrl+c restore serial port and exit.
         tcsetattr(serialPort, TCSANOW, &previous_term_options);
         fprintf(stderr,"Goodbye!\n");
         exit(0);
     }
+    // Regenerate signal catch.
     (void) signal(SIGINT, sigint_handler);
+    // Print Ctrl+c tip
     if (DEBUG) fprintf(stderr,"\nPress CTRL+C another time to exit within next two seconds!\n");
+    // Enable exit_signal
     exit_signal=1;
 
+    // Send Ctrl+c to serial Port.
     char ctrlc = 0x03;
-    write(serialPort,&ctrlc,1);
+    if (write(serialPort,&ctrlc,1) != 1)
+    {
+        if (DEBUG) fprintf(stderr,"Write error\n");
+    }
 
+    // Try to launch a thread to release exit_signal after some time.
     pthread_t CtrlCSignalReleaseThread;
     if ( pthread_create( &CtrlCSignalReleaseThread, NULL, CtrlCSignalRelease, NULL ) != 0 )
     {
@@ -106,12 +119,49 @@ void sigint_handler(int s)
     }
 }
 
+//------TryDiscovery()-----------------------//
+//--Tries to determine serial ports on system//
+//-------------------------------------------//
+void TryDiscovery()
+{
+    printf("Trying to figure availiable system serial ports:\n");
+    if (system("find /dev/serial/by-path/* -exec readlink -f {} \\;") != 0)
+    {
+        printf("No ports could be discovered automatically on the system.\n");
+    }
+    exit(0);
+}
 
+//---show_help(char *ProgName)---------------//
+//--Prints command help----------------------//
+//-------------------------------------------//
+void show_help(char *ProgName)
+{
+    fprintf(stderr,"Usage: %s [OPTIONS] Port\n",ProgName);
+    fprintf(stderr,"Options:\n");
+    fprintf(stderr,"\t--help: display this help and exit\n");
+    fprintf(stderr,"\t--verbose: set verbose mode\n");
+    fprintf(stderr,"\t--discover: Automatically try to discover system serial ports\n");
+    fprintf(stderr,"\t--cr: replace \\n with \\r\\n\n");
+    fprintf(stderr,"\t--speed [value]: set value as serial port speed\n");
+    fprintf(stderr,"\t\tAllowed speed values are: 1200 2400 4800 9600 19200 38400 57600 115200\n");
+    fprintf(stderr,"Author: Octavio Benedi Sanchez\n");
+}
 
+//--int main(int argc, char *argv[])---------//
+//--Main function----------------------------//
+//-------------------------------------------//
 int main(int argc, char *argv[])
 {
     fd_set rset;
     int c;
+    // One port is almost needed
+    if (argc==1)
+    {
+        show_help(argv[0]);
+        exit(0);
+    }
+    // Iterate on arguments to check options selected on command line
     while (1)
     {
         int option_index = 0;
@@ -124,6 +174,7 @@ int main(int argc, char *argv[])
             /* These options don't set a flag.
             We distinguish them by their indices. */
             {"help",  no_argument, 0, 'h'},
+            {"discover",  no_argument, 0, 'd'},
             {"speed",  required_argument, 0, 's'},
             {0, 0, 0, 0}
         };
@@ -140,19 +191,16 @@ int main(int argc, char *argv[])
             break;
 
         case 'h':
-            fprintf(stderr,"Usage: %s [OPTIONS] Port\n",argv[0]);
-            fprintf(stderr,"Options:\n");
-            fprintf(stderr,"\t--help: display this help and exit\n");
-            fprintf(stderr,"\t--verbose: set verbose mode\n");
-            fprintf(stderr,"\t--cr: replace \\n with \\r\\n\n");
-            fprintf(stderr,"\t--speed [value]: set value as serial port speed\n");
-            fprintf(stderr,"\t\tAllowed speed values are: 1200 2400 4800 9600 19200 38400 57600 115200\n");
-            fprintf(stderr,"Author: Octavio Benedi Sanchez\n");
+            show_help(argv[0]);
             exit(0);
+            break;
+        case 'd':
+            TryDiscovery();
             break;
 
         case 's':
         {
+            // Check for a valid speed value and set it if valid.
             speed_spec *s;
             int speed_ok = 0;
             for (s = speeds; s->name; s++)
@@ -166,21 +214,23 @@ int main(int argc, char *argv[])
             }
             if (speed_ok)
             {
-                printf("Selected speed `%s'\n", optarg);
+                if (DEBUG) printf("Selected speed `%s'\n", optarg);
             }
             else
             {
-                printf("No valid speed value `%s' provided\nDefault speed(115200) used instead.\n", optarg);
+                fprintf(stderr, "No valid speed value `%s' provided.\n", optarg);
+                if (DEBUG) printf("Default speed(115200) value used.\n", optarg);
             }
             break;
         }
 
         default:
-            fprintf(stderr,"try: %s --help\n",argv[0]);
+            show_help(argv[0]);
             exit(0);
-            abort ();
         }
     }
+
+    // Print active flags.
     if (DEBUG) printf("verbose mode on\n");
     if (DEBUG) if (CR) printf("CR mode on\n");
 
@@ -204,12 +254,13 @@ int main(int argc, char *argv[])
         }
         if (!selected_port)
         {
-            printf ("Serial port not available.\n");
+            fprintf (stderr, "Serial port not available.\n");
             exit(EXIT_FAILURE);
         }
     }
 
 
+    // Open and configure serial port.
     if ((serialPort = open(argv[optind], O_RDWR | O_NOCTTY | O_NDELAY)) == -1)
     {
         fprintf(stderr,"Unable to open the serial port %s - \n", argv[optind]);
@@ -220,6 +271,7 @@ int main(int argc, char *argv[])
         //fcntl(serialPort, F_SETFL, O_NONBLOCK); /* set up non-blocking read */
         fcntl(serialPort, F_SETFL, 0);
     }
+    // Store terminal options
     tcgetattr(serialPort, &previous_term_options);
     tcgetattr(serialPort, &term_options);
     cfsetispeed(&term_options, speed);
@@ -241,12 +293,14 @@ int main(int argc, char *argv[])
     /*raw output
      * making the applycation ready to transmit*/
     term_options.c_oflag &= ~OPOST;
-    /*aply*/
+    /*aply new terminal options*/
     tcsetattr(serialPort, TCSANOW, &term_options);
 
+    /* Catch SINGINT signal*/
     (void) signal(SIGINT, sigint_handler);
 
-    FD_ZERO(&rset); //Clear file descriptors in the rset set
+    /* Clear file descriptors in the rset set */
+    FD_ZERO(&rset);
     while (1)
     {
         FD_SET(STDIN,&rset);//Set STDIN
@@ -263,14 +317,23 @@ int main(int argc, char *argv[])
                     {
                         if (cBuff[c] == '\n' )
                         {
-                            write(serialPort,"\r",1);
+                            if (write(serialPort,"\r",1) != 1)
+                            {
+                                if (DEBUG) fprintf(stderr,"Write error\n");
+                            }
                         }
-                        write(serialPort,&cBuff[c],1);
+                        if (write(serialPort,&cBuff[c],1) != 1)
+                        {
+                            if (DEBUG) fprintf(stderr,"Write error\n");
+                        }
                     }
                 }
                 else
                 {
-                    write(serialPort, &cBuff, csize);
+                    if (write(serialPort, &cBuff, csize) != csize)
+                    {
+                        if (DEBUG) fprintf(stderr,"Write error\n");
+                    }
                 }
             }
         }
@@ -279,11 +342,14 @@ int main(int argc, char *argv[])
             //Is there stuff to read from the standard input
             if ((csize = read(serialPort, cBuff, BUFFER)) >= 1)
             {
-                write(STDIN, &cBuff, csize);
+                if (write(STDIN, &cBuff, csize) != csize)
+                {
+                    if (DEBUG) fprintf(stderr,"Write error\n");
+                }
             }
         }
     }
+    // This code is not reacheable.
     tcsetattr(serialPort, TCSANOW, &previous_term_options);
     exit (0);
 }
-
