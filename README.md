@@ -13,18 +13,18 @@ Copy taser to your path or use sudo make install
 ##Compile
 A Makefile for x86 is provided so just run make and done.
 
-##Usage
+##Usage:
 
-taser -h
-Usage: ./taser [OPTIONS] Port
-Options:
-        --help: display this help and exit
-        --verbose: set verbose mode
-        --discover: Automatically try to discover system serial ports
-        --cr: replace \n with \r\n
-        --speed [value]: set value as serial port speed
-                Allowed speed values are: 1200 2400 4800 9600 19200 38400 57600 115200
-Author: Octavio Benedi Sanchez
+  taser -h
+  Usage: ./taser [OPTIONS] Port
+  Options:
+	  --help: display this help and exit
+	  --verbose: set verbose mode
+	  --discover: Automatically try to discover system serial ports
+	  --cr: replace \n with \r\n
+	  --speed [value]: set value as serial port speed
+		  Allowed speed values are: 1200 2400 4800 9600 19200 38400 57600 115200
+  Author: Octavio Benedi Sanchez
 
 
 
