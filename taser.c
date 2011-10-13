@@ -125,7 +125,7 @@ void sigint_handler(int s)
 void TryDiscovery()
 {
     printf("Trying to figure availiable system serial ports:\n");
-    if (system("find /dev/serial/by-path/* -exec readlink -f {} \\;") != 0)
+    if (system("find /dev/serial/by-path/* -exec readlink -f {} \\; 2>/dev/null") != 0)
     {
         printf("No ports could be discovered automatically on the system.\n");
     }
