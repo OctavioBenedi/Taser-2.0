@@ -27,6 +27,7 @@
 #include <getopt.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <string.h>
 
 #define FALSE 0
 #define TRUE 1
@@ -60,6 +61,8 @@ static speed_spec speeds[] =
 
 static int csize=0;
 unsigned char cBuff[BUFFER+1];
+char UseDiscoverPort[BUFFER] ="";
+int DiscoveredPorts=0;
 
 int file_exist (char *filename)
 {
@@ -124,12 +127,47 @@ void sigint_handler(int s)
 //-------------------------------------------//
 void TryDiscovery()
 {
-    printf("Trying to figure availiable system serial ports:\n");
-    if (system("find /dev/serial/by-path/* -exec readlink -f {} \\; 2>/dev/null") != 0)
+    FILE *in;
+    extern FILE *popen();
+    char buff[BUFFER];
+
+    if (DEBUG) printf("Trying to determine availiable system serial ports:\n");
+
+    /* popen creates a pipe so we can read the output
+           of the program we are invoking */
+    if (!(in = popen("find /dev/serial/by-path/* -exec readlink -f {} \\; 2>/dev/null", "r")))
     {
-        printf("No ports could be discovered automatically on the system.\n");
+        if (DEBUG) printf("No ports could be discovered automatically on the system.\n");
+        //exit(-1);
     }
-    exit(0);
+    while (fgets(buff, sizeof(buff), in) != NULL )
+    {
+        if ((strlen(buff)>=1)&&(strlen(buff)<=BUFFER))
+        {
+            if (buff[strlen(buff)-1] == '\n')
+            {
+                buff[strlen(buff)-1] ='\0';
+            }
+            if (DEBUG) printf("Serial Port: %s\n",buff);
+            if (!DiscoveredPorts)
+            {
+                strcpy(UseDiscoverPort,buff);
+            }
+            DiscoveredPorts++;
+        }
+    }
+
+    if (!DiscoveredPorts)
+    {
+        if (DEBUG) printf("No ports could be discovered automatically on the system.\n");
+        //exit(-1);
+    }
+    /*else
+    {
+        if (DEBUG) printf("Serial Port %s will be used if no port is provided by user\n",UseDiscoverPort);
+    }*/
+    /* close the pipe */
+    pclose(in);
 }
 
 //---show_help(char *ProgName)---------------//
@@ -155,6 +193,8 @@ int main(int argc, char *argv[])
 {
     fd_set rset;
     int c;
+    int TryDiscoverPorts = 0;
+    int selected_port = FALSE;
     // One port is almost needed
     if (argc==1)
     {
@@ -195,7 +235,8 @@ int main(int argc, char *argv[])
             exit(0);
             break;
         case 'd':
-            TryDiscovery();
+            //TryDiscovery();
+            TryDiscoverPorts = TRUE;
             break;
 
         case 's':
@@ -237,31 +278,39 @@ int main(int argc, char *argv[])
     /* Print any remaining command line arguments (not options). */
     if (optind < argc)
     {
-        int selected_port = FALSE;
         while (optind < argc)
         {
             if (file_exist(argv[optind]))
             {
                 if (DEBUG) printf ("Using %s as port\n", argv[optind]);
                 selected_port = TRUE;
+                strcpy(UseDiscoverPort,argv[optind]);
                 break;
             }
             else
             {
-                if (DEBUG) printf ("%s is available\n", argv[optind]);
+                if (DEBUG) printf ("%s is not available\n", argv[optind]);
                 optind++;
             }
         }
-        if (!selected_port)
+    }
+
+    if (!selected_port)
+    {
+        if (TryDiscoverPorts)
+        {
+            TryDiscovery();
+        }
+        if (!DiscoveredPorts)
         {
             fprintf (stderr, "Serial port not available.\n");
             exit(EXIT_FAILURE);
         }
     }
 
-
+    if (DEBUG) printf("Using %s as port\n",UseDiscoverPort);
     // Open and configure serial port.
-    if ((serialPort = open(argv[optind], O_RDWR | O_NOCTTY | O_NDELAY)) == -1)
+    if ((serialPort = open(UseDiscoverPort, O_RDWR | O_NOCTTY | O_NDELAY)) == -1)
     {
         fprintf(stderr,"Unable to open the serial port %s - \n", argv[optind]);
         exit(EXIT_FAILURE);
